@@ -1,10 +1,24 @@
-import { prisma } from "@cip/db";
-
 export default async function AppDashboardPage() {
-  const projects = await prisma.project.findMany({
-    take: 5,
-    orderBy: { createdAt: "desc" },
-  });
+  const projects = [
+    {
+      id: "1",
+      name: "South Tower Renovation",
+      type: "Commercial",
+      status: "Active",
+    },
+    {
+      id: "2",
+      name: "West Campus Expansion",
+      type: "Healthcare",
+      status: "Planning",
+    },
+    {
+      id: "3",
+      name: "Harbor Garage Retrofit",
+      type: "Infrastructure",
+      status: "Active",
+    },
+  ];
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
@@ -43,7 +57,9 @@ export default async function AppDashboardPage() {
               >
                 <div>
                   <div className="font-medium">{project.name}</div>
-                  <div className="text-sm text-slate-400">{project.type ?? "Unspecified type"}</div>
+                  <div className="text-sm text-slate-400">
+                    {project.type ?? "Unspecified type"}
+                  </div>
                 </div>
                 <div className="text-sm text-cyan-400">{project.status}</div>
               </div>
