@@ -1,0 +1,230 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  EXECUTIVE
+  PM
+  VIEWER
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETE
+  ARCHIVED
+}
+
+enum UploadType {
+  RFI_CSV
+  CHANGE_ORDER_CSV
+  SCHEDULE_CSV
+  DOCUMENT
+}
+
+enum RFIStatus {
+  OPEN
+  ANSWERED
+  CLOSED
+  VOID
+}
+
+enum IssueUrgency {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum IssueType {
+  DESIGN_CONFLICT
+  MISSING_DETAIL
+  CLARIFICATION
+  SCOPE_GAP
+  PROCUREMENT_RISK
+  OTHER
+}
+
+model Organization {
+  id            String         @id @default(cuid())
+  name          String
+  slug          String         @unique
+  billingStatus String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  memberships   Membership[]
+  projects      Project[]
+  alertRules    AlertRule[]
+  auditLogs     AuditLog[]
+}
+
+model User {
+  id          String         @id @default(cuid())
+  email       String         @unique
+  name        String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  memberships Membership[]
+  uploads     Upload[]       @relation("UploadedBy")
+  auditLogs   AuditLog[]     @relation("AuditActor")
+}
+
+model Membership {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrganizationRole
+  createdAt      DateTime         @default(now())
+
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+}
+
+model Project {
+  id                 String         @id @default(cuid())
+  organizationId     String
+  name               String
+  type               String?
+  contractValue      Decimal?       @db.Decimal(14, 2)
+  startDate          DateTime?
+  endDate            DateTime?
+  estimatedDailyBurn Decimal?       @db.Decimal(14, 2)
+  status             ProjectStatus  @default(PLANNING)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  organization       Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rfis               RFI[]
+  uploads            Upload[]
+  riskScores         RiskScore[]
+  alertEvents        AlertEvent[]
+}
+
+model Upload {
+  id            String      @id @default(cuid())
+  projectId     String
+  uploadedById  String?
+  type          UploadType
+  fileName      String
+  storageKey    String
+  status        String
+  createdAt     DateTime    @default(now())
+
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy    User?       @relation("UploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+}
+
+model RFI {
+  id             String       @id @default(cuid())
+  projectId      String
+  externalId     String?
+  number         String
+  subject        String
+  description    String?      @db.Text
+  assignedParty  String?
+  submittedAt    DateTime?
+  dueAt          DateTime?
+  respondedAt    DateTime?
+  status         RFIStatus    @default(OPEN)
+  rawPayloadJson Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  analysis       IssueAnalysis?
+  riskScores     RiskScore[]
+
+  @@index([projectId, status])
+  @@unique([projectId, number])
+}
+
+model IssueAnalysis {
+  id              String       @id @default(cuid())
+  rfiId           String       @unique
+  trade           String
+  urgency         IssueUrgency
+  issueType       IssueType
+  blockedScope    String?
+  probableImpact  String?
+  confidence      Float
+  aiSummary       String       @db.Text
+  extractedJson   Json?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  rfi             RFI          @relation(fields: [rfiId], references: [id], onDelete: Cascade)
+}
+
+model RiskScore {
+  id                String      @id @default(cuid())
+  projectId         String
+  rfiId             String?
+  relatedType       String
+  relatedId         String
+  dailyCostExposure Decimal     @db.Decimal(14, 2)
+  impactMultiplier  Float
+  riskScore         Float
+  scoreReasoning    String      @db.Text
+  waitingDays       Int         @default(0)
+  createdAt         DateTime    @default(now())
+
+  project           Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rfi               RFI?        @relation(fields: [rfiId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, riskScore])
+}
+
+model AlertRule {
+  id                    String        @id @default(cuid())
+  organizationId        String
+  name                  String
+  triggerDays           Int
+  minDailyCostExposure  Decimal?      @db.Decimal(14, 2)
+  recipientsJson        Json
+  enabled               Boolean       @default(true)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  organization          Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  alertEvents           AlertEvent[]
+}
+
+model AlertEvent {
+  id            String      @id @default(cuid())
+  projectId     String
+  relatedType   String
+  relatedId     String
+  alertRuleId   String?
+  sentToJson    Json
+  sentAt        DateTime    @default(now())
+
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  alertRule     AlertRule?  @relation(fields: [alertRuleId], references: [id], onDelete: SetNull)
+}
+
+model AuditLog {
+  id              String       @id @default(cuid())
+  organizationId  String
+  actorUserId     String?
+  action          String
+  entityType      String
+  entityId        String
+  metadataJson    Json?
+  createdAt       DateTime     @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorUser       User?        @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+}
