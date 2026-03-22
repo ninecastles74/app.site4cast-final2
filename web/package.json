@@ -5,12 +5,11 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p ${PORT:-3000}",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@cip/db": "workspace:*",
     "next": "^15.2.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
